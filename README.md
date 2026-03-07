@@ -21,7 +21,7 @@ SQLite Database
 - история сообщений
 - realtime обновление (polling)
 
-## Запуск программы V1
+## Запуск программы V2
 
 pip install flask
 python backend/app.py
