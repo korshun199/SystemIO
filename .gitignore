@@ -1,4 +1,0 @@
-__pycache__/
-*.py[cod]
-server/db/db.db
-.DS_Store
