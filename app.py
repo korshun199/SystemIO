@@ -73,6 +73,13 @@ def handle_msg(data):
         emit('new_msg', msg_payload, room=f"user_{f_id}")
     else: # Общий чат
         emit('new_msg', msg_payload, broadcast=True)
-
+        
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
 if __name__ == '__main__':
-    socketio.run(app, debug=True, port=5000)
+    
+    socketio.run(app, host="0.0.0.0", debug=True, port=5000)

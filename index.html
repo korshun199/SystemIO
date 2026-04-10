@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SystemIO | Session Active</title>
+    <title>SystemIO | Terminal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.17.11/dist/css/uikit.min.css" />
     <style>
         body,
@@ -29,38 +29,55 @@
             border-right: 1px solid #222;
         }
 
+        /* ШАПКА С ИНФОЙ */
         header {
             background: #111;
             padding: 10px 15px;
             border-bottom: 1px solid #00ff4133;
+            z-index: 10;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .user-badge {
+            font-size: 0.7rem;
+            color: #00ff41;
+            background: #00ff411a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #00ff4133;
+            text-transform: uppercase;
+        }
+
+        .header-main {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 10px;
         }
 
-        /* Кнопка выхода */
         .logout-btn {
             background: none;
             border: 1px solid #444;
             color: #ff4d4d;
             font-size: 0.7rem;
-            padding: 2px 8px;
+            padding: 4px 10px;
             border-radius: 4px;
             cursor: pointer;
-            transition: 0.3s;
-        }
-
-        .logout-btn:hover {
-            background: #ff4d4d;
-            color: #fff;
         }
 
         .uk-select {
             background: #1a1a1a !important;
-            color: #00ff41 !important;
+            color: #fff !important;
             border: 1px solid #333 !important;
             font-size: 0.85rem !important;
             height: 35px;
+            flex-grow: 1;
         }
 
         #chat-messages {
@@ -138,8 +155,11 @@
 
 <body>
 
-    <div id="main-container">
+    <audio id="notif-sound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" type="audio/mpeg">
+    </audio>
 
+    <div id="main-container">
         <div id="login-section" class="uk-padding" style="margin-top: 30%;">
             <h2 class="uk-text-center" style="color: #00ff41; font-weight: bold; letter-spacing: 2px;">SYSTEM.IO</h2>
             <form id="login-form">
@@ -151,10 +171,15 @@
 
         <div id="chat-section" style="display:none; flex-direction: column; height: 100%;">
             <header>
-                <select id="chat-target" class="uk-select uk-form-width-medium" onchange="switchChat(this.value)">
-                    <option value="all">📢 ВЕСЬ КОРПУС</option>
-                </select>
-                <button class="logout-btn" onclick="logout()">ВЫХОД</button>
+                <div class="header-top">
+                    <div class="user-badge">Сессия: <span id="display-login">---</span></div>
+                    <button class="logout-btn" onclick="logout()">ВЫХОД</button>
+                </div>
+                <div class="header-main">
+                    <select id="chat-target" class="uk-select" onchange="switchChat(this.value)">
+                        <option value="all">📢 ВЕСЬ КОРПУС</option>
+                    </select>
+                </div>
             </header>
 
             <main id="chat-messages"></main>
@@ -162,8 +187,7 @@
             <footer>
                 <form id="send-form" class="uk-grid-collapse" uk-grid>
                     <div class="uk-width-expand">
-                        <input id="msg-input" class="uk-input" type="text" placeholder="Сообщение..."
-                            autocomplete="off">
+                        <input id="msg-input" class="uk-input" type="text" placeholder="Связь..." autocomplete="off">
                     </div>
                     <div class="uk-width-auto uk-margin-small-left">
                         <button class="uk-button uk-button-primary">➤</button>
@@ -181,14 +205,18 @@
         let currentOnlineIds = [];
         const socket = io();
 
-        function switchChat(id) {
-            currentTarget = id;
-            loadHistory();
+        function playNotif() {
+            const sound = document.getElementById('notif-sound');
+            if (sound) { sound.currentTime = 0; sound.play().catch(e => { }); }
         }
+
+        function switchChat(id) { currentTarget = id; loadHistory(); }
 
         function loadHistory() {
             if (!currentUser) return;
-            $.get(`/api/history?to_id=${currentTarget}&for_user=${currentUser.id}`, function (msgs) {
+            // Анти-кэш метка времени
+            const t = new Date().getTime();
+            $.get(`/api/history?to_id=${currentTarget}&for_user=${currentUser.id}&_t=${t}`, function (msgs) {
                 $('#chat-messages').empty();
                 msgs.forEach(m => renderMessage(m));
             });
@@ -200,59 +228,45 @@
             const isAuthorOnline = currentOnlineIds.includes(m.from_id);
             const onlineClass = isAuthorOnline ? 'author-online' : '';
 
-            const html = `
-                <div class="msg-item" ${pStyle} data-author-id="${m.from_id}">
-                    <span class="msg-author ${onlineClass}">
-                        <span class="online-dot">● </span>${isPrivate ? '[ЛС] ' : ''}${m.username}
-                    </span>
-                    <span class="msg-text">${m.content}</span>
-                </div>`;
+            // Убрали [ЛС], оставили только розовый фон для привата
+            const html = `<div class="msg-item" ${pStyle} data-author-id="${m.from_id}">
+                <span class="msg-author ${onlineClass}"><span class="online-dot">● </span>${m.username}</span>
+                <span class="msg-text">${m.content}</span>
+            </div>`;
             $('#chat-messages').append(html);
             $('#chat-messages').scrollTop($('#chat-messages')[0].scrollHeight);
         }
 
-        // --- ФУНКЦИЯ ВХОДА В СИСТЕМУ ---
         function initApp(user, allUsers) {
             currentUser = user;
-            // Сохраняем в память браузера
             localStorage.setItem('systemio_user', JSON.stringify(user));
 
+            $('#display-login').text(user.username); // Показываем логин в шапке
             $('#login-section').hide();
             $('#chat-section').css('display', 'flex');
-            socket.emit('go_online', { user_id: user.id });
 
+            socket.emit('go_online', { user_id: user.id });
             const select = $('#chat-target');
-            allUsers.forEach(u => {
-                if (u.id !== currentUser.id) select.append(`<option value="${u.id}">${u.full_name}</option>`);
-            });
+            select.find('option:not([value="all"])').remove();
+            allUsers.forEach(u => { if (u.id !== currentUser.id) select.append(`<option value="${u.id}">${u.full_name}</option>`); });
             loadHistory();
         }
 
-        // --- ФУНКЦИЯ ВЫХОДА ---
-        function logout() {
-            localStorage.removeItem('systemio_user');
-            location.reload();
-        }
+        function logout() { localStorage.removeItem('systemio_user'); location.reload(); }
 
         $(document).ready(function () {
-            // ПРОВЕРКА СУЩЕСТВУЮЩЕЙ СЕССИИ ПРИ ЗАГРУЗКЕ
             const savedUser = localStorage.getItem('systemio_user');
-
             if (savedUser) {
                 const user = JSON.parse(savedUser);
-                $.get('/api/users', function (users) {
-                    initApp(user, users);
-                });
+                $.get('/api/users?_t=' + new Date().getTime(), users => initApp(user, users));
             }
 
             $('#login-form').on('submit', function (e) {
                 e.preventDefault();
                 const name = $('#login-name').val().trim();
-                $.get('/api/users', function (users) {
+                $.get('/api/users?_t=' + new Date().getTime(), users => {
                     const user = users.find(u => u.username.toLowerCase() === name.toLowerCase());
-                    if (user) {
-                        initApp(user, users);
-                    } else { alert('Доступ закрыт!'); }
+                    if (user) initApp(user, users); else alert('Отказ!');
                 });
             });
 
@@ -260,14 +274,12 @@
                 e.preventDefault();
                 const val = $('#msg-input').val().trim();
                 if (!val) return;
-                socket.emit('send_msg', {
-                    from_id: currentUser.id, username: currentUser.username,
-                    content: val, to_id: currentTarget === 'all' ? null : currentTarget
-                });
+                socket.emit('send_msg', { from_id: currentUser.id, username: currentUser.username, content: val, to_id: currentTarget === 'all' ? null : currentTarget });
                 $('#msg-input').val('');
             });
 
             socket.on('new_msg', function (data) {
+                if (data.from_id != currentUser.id && (data.to_id == currentUser.id || document.hidden)) playNotif();
                 if (currentTarget === 'all') {
                     if (!data.to_id || data.to_id == currentUser.id || data.from_id == currentUser.id) renderMessage(data);
                 } else {
