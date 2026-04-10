@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SystemIO | Корпоративный чат</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.17.11/dist/css/uikit.min.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="uk-background-secondary uk-light">
+    <style>
+        
+    </style>
+
+    <div id="login-section" class="uk-flex uk-flex-center uk-flex-middle" style="height: 100vh;">
+        <div class="uk-card uk-card-default uk-card-body uk-width-medium uk-border-rounded">
+            <h3 class="uk-card-title uk-text-center uk-text-secondary">SystemIO</h3>
+            <form id="login-form">
+                <div class="uk-margin">
+                    <input id="login-name" class="uk-input" type="text" placeholder="Введите логин (напр. Ivan_Dev)"
+                        required>
+                </div>
+                <div class="uk-margin">
+                    <input id="login-pass" class="uk-input" type="password" placeholder="Пароль" required>
+                </div>
+                <button type="submit" class="uk-button uk-button-primary uk-width-1-1">Войти в корпус</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="chat-section" style="display:none; height: 100vh;" class="uk-flex uk-flex-column">
+
+        <header class="uk-background-secondary uk-padding-small uk-border-bottom">
+            <div class="uk-grid-small uk-flex-middle" uk-grid>
+                <div class="uk-width-expand">
+                    <select id="chat-target" class="uk-select">
+                        <option value="all">📢 ВЕСЬ КОРПУС (Общий чат)</option>
+                    </select>
+                </div>
+                <div class="uk-width-auto">
+                    <span id="my-name" class="uk-text-meta uk-text-bold" style="color: #00ff41;"></span>
+                </div>
+            </div>
+        </header>
+
+        <main id="chat-messages" class="uk-padding-small" style="flex-grow: 1; overflow-y: auto;">
+        </main>
+
+        <footer class="uk-padding-small uk-background-muted">
+            <form id="send-form" class="uk-grid-small" uk-grid>
+                <div class="uk-width-expand">
+                    <input id="msg-input" class="uk-input" type="text" placeholder="Введите сообщение..."
+                        autocomplete="off">
+                </div>
+                <div class="uk-width-auto">
+                    <button class="uk-button uk-button-primary">➤</button>
+                </div>
+            </form>
+        </footer>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/uikit@3.17.11/dist/js/uikit.min.js"></script>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
