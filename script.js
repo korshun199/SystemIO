@@ -86,24 +86,58 @@ $(document).ready(function () {
   });
 
   // Слушаем новые сообщения
+  // 1. Обновляем загрузку истории, чтобы подтягивать личку в общий поток
+  // 1. Обновляем загрузку истории, чтобы подтягивать личку в общий поток
+  function loadHistory() {
+    const target = $("#chat-target").val();
+    // Если выбран "Весь корпус", мы всё равно запрашиваем общую историю,
+    // но серверу стоит отдавать и личку текущего пользователя.
+    // Для простоты пока фильтруем на фронте или запрашиваем спец-маршрут.
+
+    let url = `/api/history?to_id=${target}`;
+    if (target === "all") {
+      // Мы можем добавить параметр, чтобы сервер знал, чью личку подмешать
+      url = `/api/history?to_id=all&for_user=${currentUser.id}`;
+    }
+
+    $.get(url, function (msgs) {
+      $("#chat-messages").empty();
+      msgs.forEach((m) => renderMessage(m));
+    });
+  }
+
+  // 2. Обновляем прием новых сообщений в реальном времени
   socket.on("new_msg", function (data) {
     const currentTarget = $("#chat-target").val();
 
-    // Логика отображения:
-    // 1. Сообщение в общий чат и мы в общем чате
-    // 2. Личное сообщение нам или от нас, и мы в чате с этим человеком
+    // ПРАВИЛО ОТОБРАЖЕНИЯ:
+    // Показываем сообщение если:
     if (!data.to_id && currentTarget === "all") {
+      // 1. Это общее сообщение и мы в общем чате
       renderMessage(data);
     } else if (data.to_id) {
-      const otherSide =
-        data.from_id == currentUser.id ? data.to_id : data.from_id;
-      if (currentTarget == otherSide) {
-        renderMessage(data);
-      } else {
-        UIkit.notification({
-          message: `Новое личное от ${data.username}`,
-          status: "primary",
-        });
+      // 2. Это личное сообщение
+      const isMyPrivate =
+        data.to_id == currentUser.id || data.from_id == currentUser.id;
+
+      if (isMyPrivate) {
+        if (currentTarget === "all") {
+          // Если мы в общем чате — показываем личку с пометкой
+          renderMessage(data);
+        } else {
+          // Если мы в личке с кем-то конкретным
+          const otherSide =
+            data.from_id == currentUser.id ? data.to_id : data.from_id;
+          if (currentTarget == otherSide) {
+            renderMessage(data);
+          } else {
+            // Если личка от другого человека — кидаем уведомление
+            UIkit.notification({
+              message: `Секретно от ${data.username}`,
+              status: "primary",
+            });
+          }
+        }
       }
     }
   });

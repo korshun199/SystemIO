@@ -63,5 +63,18 @@ def get_users():
     conn.close()
     return [dict(r) for r in res]
 
+def get_msgs_combined(user_id):
+    conn = get_db_connection()
+    res = conn.execute("""
+        SELECT m.*, u.username 
+        FROM messages m 
+        JOIN users u ON m.from_id = u.id 
+        WHERE m.to_id IS NULL 
+           OR m.to_id = ? 
+           OR (m.from_id = ? AND m.to_id IS NOT NULL)
+        ORDER BY m.timestamp ASC
+    """, (user_id, user_id)).fetchall()
+    conn.close()
+    return [dict(r) for r in res]
 # Инициализируем при импорте
 init_db()

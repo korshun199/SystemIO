@@ -21,10 +21,17 @@ def get_users(): return jsonify(database.get_users())
 @app.route('/api/history')
 def get_history():
     t_id = request.args.get('to_id')
-    t_id = int(t_id) if t_id and t_id != 'all' else None
-    return jsonify(database.get_msgs(t_id))
+    for_user = request.args.get('for_user')
+    
+    # Если просят общую историю
+    if t_id == 'all' or not t_id:
+        if for_user and for_user != 'undefined' and for_user != 'null':
+            return jsonify(database.get_msgs_combined(int(for_user)))
+        return jsonify(database.get_msgs(None))
+    
+    # Если просят личку с конкретным ID
+    return jsonify(database.get_msgs(int(t_id)))
 
-@socketio.on('connect')
 def handle_connect():
     print("Кто-то подключился")
 
