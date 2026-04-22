@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SystemIO | Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.17.11/dist/css/uikit.min.css" />
+    <style>
+        body,
+        html {
+            height: 100%;
+            background: #050505;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+        }
+
+        #main-container {
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #222;
+            border-right: 1px solid #222;
+        }
+
+        /* ШАПКА С ИНФОЙ */
+        header {
+            background: #111;
+            padding: 10px 15px;
+            border-bottom: 1px solid #00ff4133;
+            z-index: 10;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .user-badge {
+            font-size: 0.7rem;
+            color: #00ff41;
+            background: #00ff411a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #00ff4133;
+            text-transform: uppercase;
+        }
+
+        .header-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .logout-btn {
+            background: none;
+            border: 1px solid #444;
+            color: #ff4d4d;
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .uk-select {
+            background: #1a1a1a !important;
+            color: #fff !important;
+            border: 1px solid #333 !important;
+            font-size: 0.85rem !important;
+            height: 35px;
+            flex-grow: 1;
+        }
+
+        #chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .msg-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #161616;
+            border-radius: 8px;
+            border: 1px solid #222;
+        }
+
+        .msg-author {
+            font-weight: bold;
+            font-size: 0.75rem;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            color: #fcc859;
+        }
+
+        .author-online {
+            color: #00ff41 !important;
+        }
+
+        .online-dot {
+            font-size: 1rem;
+            margin-right: 4px;
+            display: none;
+        }
+
+        .author-online .online-dot {
+            display: inline;
+        }
+
+        .msg-text {
+            font-size: 0.95rem;
+            line-height: 1.3;
+            color: #eee;
+        }
+
+        footer {
+            background: #111;
+            padding: 10px;
+            border-top: 1px solid #222;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .uk-input {
+            background: #1a1a1a !important;
+            color: #fff !important;
+            border: 1px solid #333 !important;
+            border-radius: 20px !important;
+        }
+
+        .uk-button-primary {
+            background: #00ff41 !important;
+            color: #000 !important;
+            font-weight: bold;
+            border-radius: 50% !important;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <audio id="notif-sound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" type="audio/mpeg">
+    </audio>
+
+    <div id="main-container">
+        <div id="login-section" class="uk-padding" style="margin-top: 30%;">
+            <h2 class="uk-text-center" style="color: #00ff41; font-weight: bold; letter-spacing: 2px;">SYSTEM.IO</h2>
+            <form id="login-form">
+                <input id="login-name" class="uk-input uk-margin" type="text" placeholder="Логин..." required>
+                <button class="uk-button uk-button-primary uk-width-1-1"
+                    style="border-radius: 4px !important; height: 45px; width:100% !important;">ВХОД</button>
+            </form>
+        </div>
+
+        <div id="chat-section" style="display:none; flex-direction: column; height: 100%;">
+            <header>
+                <div class="header-top">
+                    <div class="user-badge">Сессия: <span id="display-login">---</span></div>
+                    <button class="logout-btn" onclick="logout()">ВЫХОД</button>
+                </div>
+                <div class="header-main">
+                    <select id="chat-target" class="uk-select" onchange="switchChat(this.value)">
+                        <option value="all">📢 ВЕСЬ КОРПУС</option>
+                    </select>
+                </div>
+            </header>
+
+            <main id="chat-messages"></main>
+
+            <footer>
+                <form id="send-form" class="uk-grid-collapse" uk-grid>
+                    <div class="uk-width-expand">
+                        <input id="msg-input" class="uk-input" type="text" placeholder="Связь..." autocomplete="off">
+                    </div>
+                    <div class="uk-width-auto uk-margin-small-left">
+                        <button class="uk-button uk-button-primary">➤</button>
+                    </div>
+                </form>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        let currentUser = null;
+        let currentTarget = 'all';
+        let currentOnlineIds = [];
+        const socket = io();
+
+        function playNotif() {
+            const sound = document.getElementById('notif-sound');
+            if (sound) { sound.currentTime = 0; sound.play().catch(e => { }); }
+        }
+
+        function switchChat(id) { currentTarget = id; loadHistory(); }
+
+        function loadHistory() {
+            if (!currentUser) return;
+            // Анти-кэш метка времени
+            const t = new Date().getTime();
+            $.get(`/api/history?to_id=${currentTarget}&for_user=${currentUser.id}&_t=${t}`, function (msgs) {
+                $('#chat-messages').empty();
+                msgs.forEach(m => renderMessage(m));
+            });
+        }
+
+        function renderMessage(m) {
+            const isPrivate = (m.to_id !== null && m.to_id !== undefined);
+            const pStyle = isPrivate ? 'style="border-left: 3px solid #ff00ff; background: #1a0d1a;"' : '';
+            const isAuthorOnline = currentOnlineIds.includes(m.from_id);
+            const onlineClass = isAuthorOnline ? 'author-online' : '';
+
+            // Убрали [ЛС], оставили только розовый фон для привата
+            const html = `<div class="msg-item" ${pStyle} data-author-id="${m.from_id}">
+                <span class="msg-author ${onlineClass}"><span class="online-dot">● </span>${m.username}</span>
+                <span class="msg-text">${m.content}</span>
+            </div>`;
+            $('#chat-messages').append(html);
+            $('#chat-messages').scrollTop($('#chat-messages')[0].scrollHeight);
+        }
+
+        function initApp(user, allUsers) {
+            currentUser = user;
+            localStorage.setItem('systemio_user', JSON.stringify(user));
+
+            $('#display-login').text(user.username); // Показываем логин в шапке
+            $('#login-section').hide();
+            $('#chat-section').css('display', 'flex');
+
+            socket.emit('go_online', { user_id: user.id });
+            const select = $('#chat-target');
+            select.find('option:not([value="all"])').remove();
+            allUsers.forEach(u => { if (u.id !== currentUser.id) select.append(`<option value="${u.id}">${u.full_name}</option>`); });
+            loadHistory();
+        }
+
+        function logout() { localStorage.removeItem('systemio_user'); location.reload(); }
+
+        $(document).ready(function () {
+            const savedUser = localStorage.getItem('systemio_user');
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                $.get('/api/users?_t=' + new Date().getTime(), users => initApp(user, users));
+            }
+
+            $('#login-form').on('submit', function (e) {
+                e.preventDefault();
+                const name = $('#login-name').val().trim();
+                $.get('/api/users?_t=' + new Date().getTime(), users => {
+                    const user = users.find(u => u.username.toLowerCase() === name.toLowerCase());
+                    if (user) initApp(user, users); else alert('Отказ!');
+                });
+            });
+
+            $('#send-form').on('submit', function (e) {
+                e.preventDefault();
+                const val = $('#msg-input').val().trim();
+                if (!val) return;
+                socket.emit('send_msg', { from_id: currentUser.id, username: currentUser.username, content: val, to_id: currentTarget === 'all' ? null : currentTarget });
+                $('#msg-input').val('');
+            });
+
+            socket.on('new_msg', function (data) {
+                if (data.from_id != currentUser.id && (data.to_id == currentUser.id || document.hidden)) playNotif();
+                if (currentTarget === 'all') {
+                    if (!data.to_id || data.to_id == currentUser.id || data.from_id == currentUser.id) renderMessage(data);
+                } else {
+                    const other = (data.from_id == currentUser.id) ? data.to_id : data.from_id;
+                    if (currentTarget == other) renderMessage(data);
+                }
+            });
+
+            socket.on('status_update', function (onlineIds) {
+                currentOnlineIds = onlineIds;
+                $('#chat-target option').each(function () {
+                    const id = $(this).val();
+                    if (id !== 'all') {
+                        const isOnline = onlineIds.includes(parseInt(id));
+                        const base = $(this).text().split(' ●')[0];
+                        $(this).text(isOnline ? `${base} ● В СЕТИ` : `${base} (оффлайн)`);
+                        $(this).css('color', isOnline ? '#00ff41' : '#888');
+                    }
+                });
+                $('.msg-item').each(function () {
+                    const authorId = parseInt($(this).attr('data-author-id'));
+                    $(this).find('.msg-author').toggleClass('author-online', onlineIds.includes(authorId));
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
