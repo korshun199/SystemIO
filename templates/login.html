@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SystemIO - Вход</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #1a1a1a; color: white; margin: 0; }
+        form { background: #2a2a2a; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        input { display: block; width: 100%; margin: 10px 0; padding: 10px; box-sizing: border-box; border-radius: 5px; border: none; }
+        button { width: 100%; padding: 10px; background: #007bff; border: none; color: white; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <form method="POST">
+        <h2>SystemIO Login</h2>
+        <input type="text" name="username" placeholder="Логин" required>
+        <input type="password" name="password" placeholder="Пароль" required>
+        <input type="text" name="pin" placeholder="ПИН-код (4 цифры)" maxlength="4">
+        <button type="submit">Войти</button>
+    </form>
+</body>
+</html>
