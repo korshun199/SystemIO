@@ -1,75 +1,85 @@
-import os
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, send_from_directory, jsonify, request
 from flask_socketio import SocketIO, emit, join_room
-import database as db
-from datetime import timedelta
+import database
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key_here' # Обязательно смени потом на свою!
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=10) # Тот самый таймаут "как в банке"
-socketio = SocketIO(app)
+app.config['SECRET_KEY'] = 'boss_secret_key'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-@app.before_request
-def make_session_permanent():
-    session.permanent = True
+# Словарь для хранения активных пользователей: {user_id: sid}
+online_users = {}
 
 @app.route('/')
-def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    return render_template('index.html', username=session.get('username'))
+def index(): return send_from_directory('.', 'index.html')
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        pin = request.form.get('pin') # Получаем ПИН из формы
+@app.route('/<path:path>')
+def static_files(path): return send_from_directory('.', path)
 
-        user = db.get_db_connection().execute(
-            'SELECT * FROM users WHERE username = ? AND password = ?', 
-            (username, password)
-        ).fetchone()
+@app.route('/api/users')
+def get_users(): return jsonify(database.get_users())
 
-        if user:
-            # 1. Проверка на твой "бан"
-            if not user['is_active']:
-                return "Ваш аккаунт заблокирован администратором", 403
-            
-            # 2. Проверка ПИН-кода (если он установлен в базе)
-            if user['pin_code'] and user['pin_code'] != pin:
-                return "Неверный ПИН-код", 401
-
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
-            return redirect(url_for('index'))
-            
-        return "Неверный логин или пароль", 401
-    return render_template('login.html')
-
-# --- АДМИНСКАЯ ЧАСТЬ (Твой пульт) ---
-
-@app.route('/admin/users')
-def admin_panel():
-    if session.get('role') != 'admin':
-        return "Доступ только для Олега Сергеевича!", 403
+@app.route('/api/history')
+def get_history():
+    t_id = request.args.get('to_id')
+    for_user = request.args.get('for_user')
     
-    users = db.admin_get_all_users()
-    return jsonify([dict(u) for u in users]) # Пока отдаем просто списком
+    # Если просят общую историю
+    if t_id == 'all' or not t_id:
+        if for_user and for_user != 'undefined' and for_user != 'null':
+            return jsonify(database.get_msgs_combined(int(for_user)))
+        return jsonify(database.get_msgs(None))
+    
+    # Если просят личку с конкретным ID
+    return jsonify(database.get_msgs(int(t_id)))
 
-@app.route('/admin/block/<int:user_id>', methods=['POST'])
-def block_user(user_id):
-    if session.get('role') == 'admin':
-        db.admin_update_user_status(user_id, 0)
-        return jsonify({"status": "blocked"})
-    return "Forbidden", 403
+def handle_connect():
+    print("Кто-то подключился")
 
-# Socket.io события
-@socketio.on('message')
-def handle_message(data):
-    # Тут твоя логика чата
-    emit('message', data, broadcast=True)
+@socketio.on('go_online')
+def go_online(data):
+    user_id = data['user_id']
+    online_users[user_id] = request.sid
+    join_room(f"user_{user_id}") # Личная комната для приватных сообщений
+    emit('status_update', list(online_users.keys()), broadcast=True)
 
+@socketio.on('disconnect')
+def handle_disconnect():
+    user_to_remove = None
+    for uid, sid in online_users.items():
+        if sid == request.sid:
+            user_to_remove = uid
+            break
+    if user_to_remove:
+        del online_users[user_to_remove]
+        emit('status_update', list(online_users.keys()), broadcast=True)
+
+@socketio.on('send_msg')
+def handle_msg(data):
+    f_id = data['from_id']
+    t_id = data.get('to_id')
+    content = data['content']
+    
+    database.save_msg(f_id, t_id, content)
+    
+    msg_payload = {
+        'from_id': f_id,
+        'username': data['username'],
+        'content': content,
+        'to_id': t_id
+    }
+
+    if t_id: # Приватное сообщение
+        emit('new_msg', msg_payload, room=f"user_{t_id}")
+        emit('new_msg', msg_payload, room=f"user_{f_id}")
+    else: # Общий чат
+        emit('new_msg', msg_payload, broadcast=True)
+        
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000)
+    
+    socketio.run(app, host="0.0.0.0", debug=True, port=5000)
