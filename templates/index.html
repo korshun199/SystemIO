@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SystemIO :: Control</title>
+    <style>
+        body { background: #0b0b0b; color: #d1d1d1; font-family: monospace; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        .card { background: #161616; border: 1px solid #333; padding: 15px; margin-bottom: 10px; }
+        #chat-box { height: 400px; background: #000; border: 1px solid #222; padding: 15px; overflow-y: auto; margin-bottom: 10px; }
+        input, select { background: #222; color: #00ff41; border: 1px solid #444; padding: 10px; outline: none; margin-bottom: 5px; }
+        .btn { background: #ff3e3e; color: #fff; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+        .hidden { display: none !important; }
+        .msg { margin-bottom: 8px; border-left: 2px solid #333; padding-left: 8px; }
+        .online { color: #00ff41; }
+    </style>
+</head>
+<body>
+    <div id="login-screen" class="container">
+        <div class="card" style="text-align: center;">
+            <h2>ВХОД В СИСТЕМУ</h2>
+            <input type="text" id="login-user" placeholder="Логин" style="width: 200px;"><br>
+            <input type="password" id="login-pass" placeholder="Пароль" style="width: 200px;"><br>
+            <button class="btn" onclick="auth()">ВОЙТИ</button>
+            <p id="login-error" style="color: #ff3e3e;"></p>
+        </div>
+    </div>
+
+    <div id="main-screen" class="container hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>USER: <span id="display-name" class="online"></span></h3>
+            <button class="btn" style="background: #444;" onclick="logout()">ВЫХОД</button>
+        </div>
+        
+        <div class="card">
+            <label>ЦЕЛЬ:</label>
+            <select id="chat-target" style="width: 100%;"></select>
+        </div>
+        
+        <div id="chat-box"></div>
+        
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="msg-input" style="flex-grow: 1;" placeholder="Введите сообщение...">
+            <button class="btn" onclick="send()">ОТПРАВИТЬ</button>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>

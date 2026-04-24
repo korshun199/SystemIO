@@ -1,7 +1,9 @@
 import sqlite3
 import os
+import time
 
-DB_PATH = 'base.db'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'base.db')
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -10,71 +12,73 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
-    # Удаляем старые таблицы, если они вдруг мешают, 
-    # чтобы создать всё с чистого листа с правильными именами
-    conn.executescript('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            full_name TEXT,
-            role TEXT DEFAULT 'employee'
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_id INTEGER NOT NULL,  -- Убедились, что имя именно такое
-            to_id INTEGER, 
-            content TEXT NOT NULL,
-            timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (from_id) REFERENCES users (id),
-            FOREIGN KEY (to_id) REFERENCES users (id)
-        );
-    ''')
-    try:
-        conn.execute("INSERT INTO users (username, password, full_name, role) VALUES (?,?,?,?)",
-                     ('Oleg_Boss', 'pass123', 'Олег Сергеевич', 'admin'))
-        conn.commit()
-    except: pass
-    conn.close()
-
-def save_msg(f_id, t_id, txt):
-    conn = get_db_connection()
-    # Здесь тоже используем правильные имена колонок
-    conn.execute("INSERT INTO messages (from_id, to_id, content) VALUES (?,?,?)", (f_id, t_id, txt))
+    conn.execute('''CREATE TABLE IF NOT EXISTS users 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  username TEXT UNIQUE, 
+                  password TEXT, 
+                  full_name TEXT, 
+                  role TEXT, 
+                  last_seen INTEGER)''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS messages 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  sender_id INTEGER, 
+                  receiver_id INTEGER, 
+                  content TEXT, 
+                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
 
-def get_msgs(t_id=None):
+def verify_user(username, password):
     conn = get_db_connection()
-    if t_id:
-        res = conn.execute("""SELECT m.*, u.username FROM messages m JOIN users u ON m.from_id = u.id 
-                           WHERE to_id = ? OR (m.from_id = ? AND to_id IS NOT NULL) ORDER BY timestamp ASC""", (t_id, t_id)).fetchall()
-    else:
-        res = conn.execute("""SELECT m.*, u.username FROM messages m JOIN users u ON m.from_id = u.id 
-                           WHERE to_id IS NULL ORDER BY timestamp ASC""").fetchall()
+    user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password)).fetchone()
     conn.close()
-    return [dict(r) for r in res]
+    return dict(user) if user else None
 
-# В файле database.py должна быть именно эта функция:
-def get_users():
+def update_last_seen(user_id):
     conn = get_db_connection()
-    # Берем данные так, чтобы они подходили для JSON
-    res = conn.execute("SELECT id, username, full_name, role FROM users").fetchall()
+    conn.execute('UPDATE users SET last_seen = ? WHERE id = ?', (int(time.time()), user_id))
+    conn.commit()
     conn.close()
-    return [dict(r) for r in res]
 
-def get_msgs_combined(user_id):
+def get_users_with_status():
     conn = get_db_connection()
-    res = conn.execute("""
-        SELECT m.*, u.username 
-        FROM messages m 
-        JOIN users u ON m.from_id = u.id 
-        WHERE m.to_id IS NULL 
-           OR m.to_id = ? 
-           OR (m.from_id = ? AND m.to_id IS NOT NULL)
-        ORDER BY m.timestamp ASC
-    """, (user_id, user_id)).fetchall()
+    now = int(time.time())
+    users = conn.execute('SELECT id, username, last_seen, full_name, role FROM users').fetchall()
     conn.close()
-    return [dict(r) for r in res]
-# Инициализируем при импорте
+    result = []
+    for u in users:
+        d = dict(u)
+        ls = d.get('last_seen') or 0
+        d['is_online'] = (now - ls) < 60 if ls > 0 else False
+        result.append(d)
+    return result
+
+def get_main_messages(my_id):
+    conn = get_db_connection()
+    query = '''SELECT m.*, u.username as sender_name FROM messages m 
+               JOIN users u ON m.sender_id = u.id
+               WHERE m.receiver_id = 0 OR m.receiver_id = ? OR m.sender_id = ?
+               ORDER BY m.timestamp ASC'''
+    msgs = conn.execute(query, (my_id, my_id)).fetchall()
+    conn.close()
+    return [dict(m) for m in msgs]
+
+def get_private_chat(my_id, with_id):
+    conn = get_db_connection()
+    query = '''SELECT m.*, u.username as sender_name FROM messages m 
+               JOIN users u ON m.sender_id = u.id
+               WHERE (m.sender_id = ? AND m.receiver_id = ?) 
+               OR (m.sender_id = ? AND m.receiver_id = ?) 
+               ORDER BY m.timestamp ASC'''
+    msgs = conn.execute(query, (my_id, with_id, with_id, my_id)).fetchall()
+    conn.close()
+    return [dict(m) for m in msgs]
+
+def add_message(sender_id, receiver_id, content):
+    conn = get_db_connection()
+    conn.execute('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', 
+                 (sender_id, receiver_id, content))
+    conn.commit() # ВОТ ОН, ГЛАВНЫЙ ФИКС!
+    conn.close()
+
 init_db()
