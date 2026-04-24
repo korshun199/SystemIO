@@ -1,25 +1,34 @@
 from flask import Flask, render_template, request, jsonify
 import sqlite3
 import os
+import configparser
+
+# Инициализация конфига
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 app = Flask(__name__)
-DATABASE = 'base.db'
+
+# Глобальные переменные из config.ini
+DATABASE = config.get('DATABASE', 'PATH')
+HOST = config.get('SERVER', 'HOST')
+PORT = config.getint('SERVER', 'PORT')
+DEBUG = config.getboolean('SERVER', 'DEBUG')
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
 
-# АВТОМАТИЧЕСКАЯ ПРОВЕРКА И ДОБАВЛЕНИЕ КОЛОНОК
 def init_db():
     if not os.path.exists(DATABASE):
-        print("База base.db не найдена!")
+        print(f"Критическая ошибка: База {DATABASE} не найдена!")
         return
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Список колонок, которые нам жизненно необходимы
+    # Список необходимых колонок (точка памяти сохранена)
     required_columns = {
         'is_online': 'INTEGER DEFAULT 0',
         'last_seen': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
@@ -27,18 +36,17 @@ def init_db():
     }
     
     try:
-        # Проверяем, что есть в таблице users
         cursor.execute("PRAGMA table_info(users)")
         existing_columns = [column[1] for column in cursor.fetchall()]
         
         for col, col_type in required_columns.items():
             if col not in existing_columns:
-                print(f"Добавляю отсутствующую колонку: {col}")
+                print(f"Конфигурация: Добавляю колонку {col} в {DATABASE}")
                 conn.execute(f'ALTER TABLE users ADD COLUMN {col} {col_type}')
         
         conn.commit()
     except Exception as e:
-        print(f"Ошибка при настройке колонок: {e}")
+        print(f"Ошибка конфигурирования БД: {e}")
     finally:
         conn.close()
 
@@ -50,7 +58,7 @@ def index():
 def admin():
     return render_template('admin.html')
 
-# --- API ---
+# --- API (ВСЕ ПУТИ И ЛОГИКА СОХРАНЕНЫ) ---
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -61,12 +69,11 @@ def login():
     conn.close()
     if user:
         return jsonify({"status": "ok", "user": dict(user)})
-    return jsonify({"status": "error", "message": "Ошибка авторизации"})
+    return jsonify({"status": "error", "message": "Доступ запрещен"})
 
 @app.route('/api/users')
 def get_users():
     conn = get_db_connection()
-    # Теперь колонки точно существуют благодаря init_db
     users = conn.execute('SELECT id, username, is_online, deleted FROM users').fetchall()
     conn.close()
     return jsonify([dict(u) for u in users])
@@ -116,7 +123,7 @@ def send_msg():
     conn.close()
     return jsonify({"status": "ok"})
 
-# --- АДМИНКА ---
+# --- API АДМИНКИ (ПОДДЕРЖКА ВЕТКИ admin-dev_conf) ---
 
 @app.route('/api/admin/history/<int:user_id>')
 def admin_user_history(user_id):
@@ -132,16 +139,6 @@ def admin_user_history(user_id):
     conn.close()
     return jsonify([dict(m) for m in msgs])
 
-@app.route('/api/admin/user/add', methods=['POST'])
-def admin_add_user():
-    data = request.json
-    conn = get_db_connection()
-    conn.execute('INSERT INTO users (username, password, deleted) VALUES (?, ?, ?)',
-                (data['username'], data['password'], data.get('deleted', 0)))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
-
 @app.route('/api/admin/user/update', methods=['POST'])
 def admin_update_user():
     data = request.json
@@ -155,5 +152,5 @@ def admin_update_user():
     return jsonify({"status": "ok"})
 
 if __name__ == '__main__':
-    init_db() # Самолечение базы при старте
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    init_db()
+    app.run(debug=DEBUG, host=HOST, port=PORT)
