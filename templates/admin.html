@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM IO | ROOT DIRECT</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uikit@3.16.22/dist/css/uikit.min.css" />
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/uikit@3.16.22/dist/js/uikit.min.js"></script>
+
+    <style>
+        :root { --bg: #0a0a0a; --panel: #141414; --accent: #32d296; --danger: #f0506e; }
+        body { background: var(--bg); color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        
+        .admin-card { background: var(--panel); border: 1px solid #333; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .uk-input, .uk-select { background: #1a1a1a !important; color: #fff !important; border: 1px solid #333; }
+        
+        /* Цвета для списка */
+        .opt-deleted { color: var(--danger) !important; background: #2a1212; }
+        
+        /* История сообщений */
+        #history-area { 
+            background: #000; border: 1px solid #333; border-radius: 8px;
+            height: 400px; overflow-y: auto; padding: 20px;
+            display: flex; flex-direction: column;
+        }
+        .msg { border-radius: 6px; padding: 10px; margin-bottom: 10px; width: 85%; font-size: 0.9rem; }
+        .msg-out { align-self: flex-start; margin-left: 15%; background: #1a2e1a; border-left: 4px solid var(--accent); }
+        .msg-in { align-self: flex-start; background: #1e1e1e; border-left: 4px solid #444; }
+        
+        .label-red { color: var(--danger); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="uk-container uk-container-small">
+    <div class="uk-flex uk-flex-between uk-margin-bottom">
+        <h3 class="uk-text-bold uk-margin-remove">SYSTEM IO <span class="uk-text-danger">DIRECT CONTROL</span></h3>
+        <a href="/" class="uk-button uk-button-text">← В ЧАТ</a>
+    </div>
+
+    <div class="admin-card">
+        <label class="uk-form-label">ВЫБЕРИТЕ ПОЛЬЗОВАТЕЛЯ ДЛЯ ПРАВКИ</label>
+        <select id="user-selector" class="uk-select uk-margin-small-top" onchange="loadUserInfo()">
+            <option value="">-- Нажмите, чтобы выбрать --</option>
+        </select>
+    </div>
+
+    <div id="edit-panel" class="admin-card uk-hidden">
+        <div class="uk-grid-small" uk-grid>
+            <div class="uk-width-1-3@m">
+                <label>Логин</label>
+                <input id="inp-name" class="uk-input" type="text">
+            </div>
+            <div class="uk-width-1-3@m">
+                <label>Новый пароль</label>
+                <input id="inp-pass" class="uk-input" type="text" placeholder="Пусто = не менять">
+            </div>
+            <div class="uk-width-1-3@m">
+                <label>Статус удаления (1-Да, 0-Нет)</label>
+                <input id="inp-del" class="uk-input" type="number" min="0" max="1">
+            </div>
+        </div>
+        <div class="uk-margin-top uk-flex uk-flex-between">
+            <button class="uk-button uk-button-primary" onclick="saveUser()">СОХРАНИТЬ ИЗМЕНЕНИЯ</button>
+            <button class="uk-button uk-button-danger" onclick="toggleHistory()">СООБЩЕНИЯ</button>
+        </div>
+    </div>
+
+    <div id="history-panel" class="uk-hidden">
+        <h4 class="uk-text-bold">АРХИВ СООБЩЕНИЙ: <span id="target-name" class="uk-text-success"></span></h4>
+        <div id="history-area"></div>
+    </div>
+</div>
+
+<script>
+    let users = [];
+    let selectedUserId = null;
+
+    // Загрузка списка пользователей в выпадающий список
+    const fetchUsers = () => {
+        $.get('/api/users', (data) => {
+            users = data;
+            const sel = $('#user-selector');
+            sel.html('<option value="">-- Нажмите, чтобы выбрать --</option>');
+            data.forEach(u => {
+                const isDel = parseInt(u.deleted) === 1;
+                const label = isDel ? `[УДАЛЕН] ${u.username.toUpperCase()}` : u.username.toUpperCase();
+                const cls = isDel ? 'opt-deleted' : '';
+                sel.append(`<option value="${u.id}" class="${cls}">${label}</option>`);
+            });
+        });
+    };
+
+    // При выборе пользователя заполняем поля
+    const loadUserInfo = () => {
+        const id = $('#user-selector').val();
+        if (!id) {
+            $('#edit-panel, #history-panel').addClass('uk-hidden');
+            return;
+        }
+        selectedUserId = id;
+        const u = users.find(x => x.id == id);
+        
+        $('#inp-name').val(u.username);
+        $('#inp-pass').val('');
+        $('#inp-del').val(u.deleted || 0);
+        
+        $('#edit-panel').removeClass('uk-hidden');
+        $('#history-panel').addClass('uk-hidden'); // Скрываем историю при смене юзера
+    };
+
+    // Сохранение данных
+    const saveUser = () => {
+        const payload = {
+            id: selectedUserId,
+            username: $('#inp-name').val(),
+            password: $('#inp-pass').val(),
+            deleted: $('#inp-del').val()
+        };
+        $.ajax({
+            url: '/api/admin/user/update',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(payload),
+            success: () => {
+                UIkit.notification({message: 'Данные сохранены!', status: 'success'});
+                fetchUsers();
+            }
+        });
+    };
+
+    // Загрузка и показ истории
+    const toggleHistory = () => {
+        const u = users.find(x => x.id == selectedUserId);
+        $('#target-name').text(u.username.toUpperCase());
+        
+        $.get(`/api/admin/history/${selectedUserId}`, (msgs) => {
+            const html = msgs.map(m => {
+                const isOut = m.sender_id == selectedUserId;
+                const cls = isOut ? 'msg-out' : 'msg-in';
+                const side = isOut ? '-> ' + m.receiver_name : '<- ' + m.sender_name;
+                return `
+                    <div class="msg ${cls}">
+                        <div style="font-size:0.75rem; color:#888;">${m.timestamp} | ${side}</div>
+                        <div style="word-wrap: break-word;">${m.content}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            $('#history-area').html(html || '<p class="uk-text-center uk-margin-top">Нет сообщений</p>');
+            $('#history-panel').removeClass('uk-hidden');
+            $('#history-area').scrollTop($('#history-area')[0].scrollHeight);
+        });
+    };
+
+    $(document).ready(fetchUsers);
+</script>
+</body>
+</html>
