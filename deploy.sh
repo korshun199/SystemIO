@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # --- НАСТРОЙКИ ---
-REMOTE_USER="work" # Твой пользователь на VPS
-REMOTE_HOST="твой_ip_адрес" # IP твоего сервера
+REMOTE_USER="oleg" # Твой пользователь на VPS
+REMOTE_HOST="46.8.221.179" # IP твоего сервера
 REMOTE_PATH="/home/work/SystemIO/base.db"
 COMMIT_MSG=$1
 
