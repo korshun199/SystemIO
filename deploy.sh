@@ -1,34 +1,36 @@
 #!/bin/bash
 
 # --- НАСТРОЙКИ ---
-REMOTE_USER="oleg" # Твой пользователь на VPS
-REMOTE_HOST="46.8.221.179" # IP твоего сервера
+REMOTE_USER="oleg"
+REMOTE_HOST="46.8.221.179"
 REMOTE_PATH="/home/work/SystemIO/base.db"
 COMMIT_MSG=$1
 
-# Проверка, ввел ли ты сообщение для коммита
 if [ -z "$COMMIT_MSG" ]
 then
-      COMMIT_MSG="Admin-dev: sync work $(date +'%Y-%m-%d %H:%M')"
+      COMMIT_MSG="Sync: full structure update $(date +'%Y-%m-%d %H:%M')"
 fi
 
-echo "🚀 Начинаем деплой в ветку admin-dev..."
+echo "🚀 Начинаем зеркальную синхронизацию в ветку admin-dev..."
 
-# 1. Работа с ГИТОМ
-git add .
+# 1. Работа с ГИТОМ (Зеркальный режим)
+# Флаг -A (или --all) принудительно обновляет индекс: 
+# добавляет новые, фиксирует изменения и УДАЛЯЕТ то, что ты удалил локально.
+git add -A 
+
 git commit -m "$COMMIT_MSG"
 git push origin admin-dev
 
-echo "✅ Код отправлен в GitHub/GitLab (ветка admin-dev)"
+echo "✅ Гит полностью синхронизирован (удаленные файлы стерты и в облаке)"
 
-# 2. Передача базы по SSH (SCP)
+# 2. Передача базы по SSH
 echo "📦 Отправляем базу на VPS..."
-scp  -P 4101 ./base.db $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
+scp -P 4101 ./base.db $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
 
 if [ $? -eq 0 ]; then
-    echo "✅ База успешно доставлена в $REMOTE_PATH"
+    echo "✅ База доставлена в $REMOTE_PATH"
 else
     echo "❌ Ошибка при передаче базы!"
 fi
 
-echo "🎉 Все операции завершены успешно!"
+echo "🎉 Синхронизация завершена успешно!"
