@@ -55,9 +55,12 @@ def get_users_with_status():
 
 def get_main_messages(my_id):
     conn = get_db_connection()
+    # Логика: сообщения ВСЕМ (0) ИЛИ сообщения МНЕ ИЛИ сообщения ОТ МЕНЯ
     query = '''SELECT m.*, u.username as sender_name FROM messages m 
                JOIN users u ON m.sender_id = u.id
-               WHERE m.receiver_id = 0 OR m.receiver_id = ? OR m.sender_id = ?
+               WHERE m.receiver_id = 0 
+                  OR m.receiver_id = ? 
+                  OR m.sender_id = ?
                ORDER BY m.timestamp ASC'''
     msgs = conn.execute(query, (my_id, my_id)).fetchall()
     conn.close()

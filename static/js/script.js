@@ -39,10 +39,12 @@ function showMain() {
   document.getElementById("display-name").textContent =
     myData.username.toUpperCase();
 
-  // Запуск циклов
-  setInterval(heartbeat, 15000);
-  setInterval(updateUsers, 5000);
-  setInterval(loadChat, 3000);
+  // Единый цикл обновлений
+  setInterval(() => {
+    heartbeat();
+    updateUsers();
+    loadChat();
+  }, 3000);
 
   heartbeat();
   updateUsers();
@@ -55,6 +57,7 @@ function logout() {
 }
 
 function heartbeat() {
+  if (!myData) return;
   fetch("/api/heartbeat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -73,8 +76,9 @@ function updateUsers() {
         if (u.id != myData.id) {
           const opt = document.createElement("option");
           opt.value = u.id;
-          opt.textContent =
-            (u.is_online ? "● " : "○ ") + u.username.toUpperCase();
+          // ВОЗВРАЩАЕМ СТАТУСЫ
+          const statusIcon = u.is_online ? "● " : "○ ";
+          opt.textContent = statusIcon + u.username.toUpperCase();
           if (u.is_online) opt.style.color = "#00ff41";
           select.appendChild(opt);
         }
@@ -95,18 +99,63 @@ function loadChat() {
     .then((msgs) => {
       const box = document.getElementById("chat-box");
       const isAtBottom =
-        box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
+        box.scrollHeight - box.scrollTop <= box.clientHeight + 100;
+
+      msgs.sort((a, b) => {
+        let dateA = new Date(a.timestamp.replace(" ", "T"));
+        let dateB = new Date(b.timestamp.replace(" ", "T"));
+        return dateA - dateB || a.id - b.id;
+      });
 
       box.innerHTML = msgs
-        .map(
-          (m) => `
-            <div class="msg">
-                <b style="color:${
-                  m.sender_id == myData.id ? "#00ff41" : "#ff3e3e"
-                }">${m.sender_name}:</b> ${m.content}
-            </div>
-        `
-        )
+        .map((m) => {
+          let timeStr = "--:--";
+          let dateStr = "";
+          try {
+            const parts = m.timestamp.split(" ");
+            const dateParts = parts[0].split("-");
+            dateStr = `${dateParts[2]}.${dateParts[1]}`;
+            timeStr = parts[1].substring(0, 5);
+          } catch (e) {}
+
+          // ГЛАВНАЯ ЛОГИКА ВЫДЕЛЕНИЯ
+          const isGeneral = m.receiver_id == 0; // Сообщение в общак
+          const isToMe = m.receiver_id == myData.id; // Лично мне
+          const isFromMe = m.sender_id == myData.id && m.receiver_id != 0; // Мой личный ответ
+
+          let bgStyle = "background: #161616;"; // Стандартный фон
+          let borderStyle = "border-left: 3px solid #00ff41;"; // Зеленый для общего
+          let label = "";
+
+          if (isToMe) {
+            bgStyle = "background: #2a1010;"; // Темно-красный фон для входящей лички
+            borderStyle = "border-left: 3px solid #ff3e3e;";
+            label =
+              "<small style='color: #ff3e3e; margin-left: 10px;'>[ЛИЧНО ВАМ]</small>";
+          } else if (isFromMe) {
+            bgStyle = "background: #101a10;"; // Темно-зеленый фон для исходящей лички
+            borderStyle = "border-left: 3px solid #00ff41;";
+            label =
+              "<small style='color: #00ff41; margin-left: 10px;'>[ВАШ ШЕПОТ]</small>";
+          }
+
+          return `
+              <div class="msg" style="${borderStyle} ${bgStyle} margin-bottom: 12px; padding: 8px; border-radius: 0 4px 4px 0;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75em; opacity: 0.8; margin-bottom: 5px;">
+                      <span>
+                          <b style="color: ${
+                            m.sender_id == myData.id ? "#00ff41" : "#ff3e3e"
+                          }">${m.sender_name.toUpperCase()}</b>
+                          ${label}
+                      </span>
+                      <span style="color: #666;">${dateStr} | <strong style="color: #00ff41;">${timeStr}</strong></span>
+                  </div>
+                  <div style="color: #fff; font-family: sans-serif; font-size: 0.95em;">${
+                    m.content
+                  }</div>
+              </div>
+          `;
+        })
         .join("");
 
       if (isAtBottom) box.scrollTop = box.scrollHeight;
@@ -116,7 +165,8 @@ function loadChat() {
 function send() {
   const input = document.getElementById("msg-input");
   const tid = document.getElementById("chat-target").value || 0;
-  if (!input.value.trim()) return;
+  const val = input.value.trim();
+  if (!val) return;
 
   fetch("/api/chat/send", {
     method: "POST",
@@ -124,7 +174,7 @@ function send() {
     body: JSON.stringify({
       sender_id: myData.id,
       receiver_id: parseInt(tid),
-      content: input.value.trim(),
+      content: val,
     }),
   }).then(() => {
     input.value = "";
