@@ -1,183 +1,162 @@
 let myData = JSON.parse(localStorage.getItem("userData"));
 
-document.addEventListener("DOMContentLoaded", () => {
-  if (myData) {
-    showMain();
-  } else {
-    document.getElementById("login-screen").classList.remove("hidden");
-  }
+const sync = (el) => {
+  const val = $(el).val();
+  $(".chat-sync").val(val);
+  loadChat();
+};
 
-  document.getElementById("msg-input").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") send();
-  });
-});
-
-function auth() {
-  const u = document.getElementById("login-user").value;
-  const p = document.getElementById("login-pass").value;
-
-  fetch("/api/login", {
+const auth = () => {
+  const u = $("#login-user").val();
+  const p = $("#login-pass").val();
+  $.ajax({
+    url: "/api/login",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: u, password: p }),
-  })
-    .then((res) => res.json())
-    .then((res) => {
+    contentType: "application/json",
+    data: JSON.stringify({ username: u, password: p }),
+    success: (res) => {
       if (res.status === "ok") {
         localStorage.setItem("userData", JSON.stringify(res.user));
         myData = res.user;
         showMain();
       } else {
-        document.getElementById("login-error").textContent = res.message;
+        $("#login-error").text(res.message);
       }
-    });
-}
+    },
+  });
+};
 
-function showMain() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("main-screen").classList.remove("hidden");
-  document.getElementById("display-name").textContent =
-    myData.username.toUpperCase();
+const showMain = () => {
+  $("#login-screen").addClass("hidden");
+  $("#main-screen").removeClass("hidden").css("display", "flex");
+  $("#display-name").text(myData.username.toUpperCase());
 
-  // Единый цикл обновлений
-  setInterval(() => {
+  if (myData.id === 1 || myData.username.toLowerCase() === "admin") {
+    $("#admin-btn").removeClass("hidden");
+  }
+
+  if (window.chatInterval) clearInterval(window.chatInterval);
+  window.chatInterval = setInterval(() => {
     heartbeat();
     updateUsers();
     loadChat();
   }, 3000);
-
   heartbeat();
   updateUsers();
   loadChat();
-}
+};
 
-function logout() {
+const logout = () => {
   localStorage.removeItem("userData");
   location.reload();
-}
+};
 
-function heartbeat() {
+const heartbeat = () => {
   if (!myData) return;
-  fetch("/api/heartbeat", {
+  $.ajax({
+    url: "/api/heartbeat",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: myData.id }),
+    contentType: "application/json",
+    data: JSON.stringify({ user_id: myData.id }),
   });
-}
+};
 
-function updateUsers() {
-  fetch("/api/users")
-    .then((res) => res.json())
-    .then((data) => {
-      const select = document.getElementById("chat-target");
-      const current = select.value;
-      select.innerHTML = '<option value="0">-- ОБЩИЙ КАНАЛ --</option>';
+const updateUsers = () => {
+  $.get("/api/users", (data) => {
+    const selects = $(".chat-sync");
+    const currentVal = selects.val() || "0";
+    selects.each(function () {
+      const s = $(this);
+      s.empty().append('<option value="0">🌍 ОБЩИЙ КАНАЛ</option>');
       data.forEach((u) => {
         if (u.id != myData.id) {
-          const opt = document.createElement("option");
-          opt.value = u.id;
-          // ВОЗВРАЩАЕМ СТАТУСЫ
-          const statusIcon = u.is_online ? "● " : "○ ";
-          opt.textContent = statusIcon + u.username.toUpperCase();
-          if (u.is_online) opt.style.color = "#00ff41";
-          select.appendChild(opt);
+          const dot = u.is_online ? "●" : "○";
+          const color = u.is_online ? "#32d296" : "#888";
+          const opt = $("<option>")
+            .val(u.id)
+            .text(`${dot} ${u.username.toUpperCase()}`)
+            .css("color", color);
+          s.append(opt);
         }
       });
-      select.value = current;
+      s.val(currentVal);
     });
-}
+  });
+};
 
-function loadChat() {
-  const tid = document.getElementById("chat-target").value || 0;
+const loadChat = () => {
+  const tid = $(".chat-sync").val() || 0;
   const url =
     tid == "0"
       ? `/api/chat/main/${myData.id}`
       : `/api/chat/private/${myData.id}/${tid}`;
+  $.get(url, (msgs) => {
+    const box = $("#chat-box");
+    const isAtBottom =
+      box[0].scrollHeight - box.scrollTop() <= box.outerHeight() + 100;
+    msgs.sort(
+      (a, b) =>
+        new Date(a.timestamp.replace(" ", "T")) -
+          new Date(b.timestamp.replace(" ", "T")) || a.id - b.id
+    );
 
-  fetch(url)
-    .then((res) => res.json())
-    .then((msgs) => {
-      const box = document.getElementById("chat-box");
-      const isAtBottom =
-        box.scrollHeight - box.scrollTop <= box.clientHeight + 100;
+    const html = msgs
+      .map((m) => {
+        // Формируем дату и время (24.04 | 10:49)
+        let timeStr = "--:--";
+        let dateStr = "";
+        if (m.timestamp) {
+          const parts = m.timestamp.split(" ");
+          const dateParts = parts[0].split("-");
+          dateStr = `${dateParts[2]}.${dateParts[1]}`; // 24.04
+          timeStr = parts[1].substring(0, 5); // 10:49
+        }
 
-      msgs.sort((a, b) => {
-        let dateA = new Date(a.timestamp.replace(" ", "T"));
-        let dateB = new Date(b.timestamp.replace(" ", "T"));
-        return dateA - dateB || a.id - b.id;
-      });
+        let bubbleClass = m.sender_id == myData.id ? "msg-right" : "msg-left";
+        if (m.receiver_id == myData.id) bubbleClass += " msg-private";
 
-      box.innerHTML = msgs
-        .map((m) => {
-          let timeStr = "--:--";
-          let dateStr = "";
-          try {
-            const parts = m.timestamp.split(" ");
-            const dateParts = parts[0].split("-");
-            dateStr = `${dateParts[2]}.${dateParts[1]}`;
-            timeStr = parts[1].substring(0, 5);
-          } catch (e) {}
+        return `
+                <div class="msg-bubble ${bubbleClass}">
+                    <div class="uk-flex uk-flex-between uk-margin-small-bottom">
+                        <span class="uk-text-bold" style="font-size: 0.75em; color: #32d296;">${m.sender_name.toUpperCase()}</span>
+                        <span class="uk-text-muted" style="font-size: 0.65em;">${dateStr} | ${timeStr}</span>
+                    </div>
+                    <div style="font-size: 0.9em; word-wrap: break-word;">${
+                      m.content
+                    }</div>
+                </div>
+            `;
+      })
+      .join("");
+    box.html(html);
+    if (isAtBottom) box.scrollTop(box[0].scrollHeight);
+  });
+};
 
-          // ГЛАВНАЯ ЛОГИКА ВЫДЕЛЕНИЯ
-          const isGeneral = m.receiver_id == 0; // Сообщение в общак
-          const isToMe = m.receiver_id == myData.id; // Лично мне
-          const isFromMe = m.sender_id == myData.id && m.receiver_id != 0; // Мой личный ответ
-
-          let bgStyle = "background: #161616;"; // Стандартный фон
-          let borderStyle = "border-left: 3px solid #00ff41;"; // Зеленый для общего
-          let label = "";
-
-          if (isToMe) {
-            bgStyle = "background: #2a1010;"; // Темно-красный фон для входящей лички
-            borderStyle = "border-left: 3px solid #ff3e3e;";
-            label =
-              "<small style='color: #ff3e3e; margin-left: 10px;'>[ЛИЧНО ВАМ]</small>";
-          } else if (isFromMe) {
-            bgStyle = "background: #101a10;"; // Темно-зеленый фон для исходящей лички
-            borderStyle = "border-left: 3px solid #00ff41;";
-            label =
-              "<small style='color: #00ff41; margin-left: 10px;'>[ВАШ ШЕПОТ]</small>";
-          }
-
-          return `
-              <div class="msg" style="${borderStyle} ${bgStyle} margin-bottom: 12px; padding: 8px; border-radius: 0 4px 4px 0;">
-                  <div style="display: flex; justify-content: space-between; font-size: 0.75em; opacity: 0.8; margin-bottom: 5px;">
-                      <span>
-                          <b style="color: ${
-                            m.sender_id == myData.id ? "#00ff41" : "#ff3e3e"
-                          }">${m.sender_name.toUpperCase()}</b>
-                          ${label}
-                      </span>
-                      <span style="color: #666;">${dateStr} | <strong style="color: #00ff41;">${timeStr}</strong></span>
-                  </div>
-                  <div style="color: #fff; font-family: sans-serif; font-size: 0.95em;">${
-                    m.content
-                  }</div>
-              </div>
-          `;
-        })
-        .join("");
-
-      if (isAtBottom) box.scrollTop = box.scrollHeight;
-    });
-}
-
-function send() {
-  const input = document.getElementById("msg-input");
-  const tid = document.getElementById("chat-target").value || 0;
-  const val = input.value.trim();
+const send = () => {
+  const input = $("#msg-input");
+  const tid = $(".chat-sync").val() || 0;
+  const val = input.val().trim();
   if (!val) return;
-
-  fetch("/api/chat/send", {
+  $.ajax({
+    url: "/api/chat/send",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    contentType: "application/json",
+    data: JSON.stringify({
       sender_id: myData.id,
       receiver_id: parseInt(tid),
       content: val,
     }),
-  }).then(() => {
-    input.value = "";
-    loadChat();
+    success: () => {
+      input.val("");
+      loadChat();
+    },
   });
-}
+};
+
+$(document).ready(() => {
+  if (myData) showMain();
+  $("#msg-input").on("keypress", (e) => {
+    if (e.which === 13) send();
+  });
+});
