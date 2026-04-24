@@ -23,7 +23,7 @@ echo "✅ Код отправлен в GitHub/GitLab (ветка admin-dev)"
 
 # 2. Передача базы по SSH (SCP)
 echo "📦 Отправляем базу на VPS..."
-scp ./base.db $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
+scp  -P 4101 ./base.db $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH
 
 if [ $? -eq 0 ]; then
     echo "✅ База успешно доставлена в $REMOTE_PATH"
